@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Webhook Dialogflow ES -> DeepSeek (Node/Express)",
   "type": "module",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
+  "main": "server.js",
+"scripts": {
+  "start": "node server.js"
+}
+
     "dev": "node --watch index.js"
   },
   "engines": {
