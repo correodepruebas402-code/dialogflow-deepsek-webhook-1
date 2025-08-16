@@ -1,4 +1,4 @@
-// server.js
+// index.js
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -10,10 +10,10 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(cors());
 
-// Seguridad opcional: protege el webhook con un token propio
+// Seguridad opcional con header Authorization: Bearer <WEBHOOK_SECRET>
 const requireAuth = (req, res, next) => {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) return next(); // sin política si no configuras secret
+  if (!secret) return next(); // si no configuras secret, no valida
   const header = req.headers["authorization"] || "";
   if (header === `Bearer ${secret}`) return next();
   return res.status(401).json({ error: "Unauthorized" });
@@ -25,35 +25,31 @@ const deepseek = new OpenAI({
   baseURL: "https://api.deepseek.com",
 });
 
-const MAX_TURNS = 12; // para no crecer tokens
+const MAX_TURNS = 12;
 
-// Healthcheck (para Render y prueba local)
+// Healthcheck
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
-/**
- * Webhook para Dialogflow ES.
- * Espera un WebhookRequest y responde con fulfillmentText + (opcional) outputContexts
- */
+// Webhook Dialogflow ES
 app.post("/webhook", requireAuth, async (req, res) => {
   try {
     const df = req.body || {};
     const session = df.session || "";
     const userText = df.queryResult?.queryText ?? "";
 
-    // Lee/recupera historial desde el contexto "deepseek_session"
+    // Contexto de conversación
     const ctxs = df.queryResult?.outputContexts || [];
     const ctxSuffix = "/contexts/deepseek_session";
-    const found = ctxs.find(c => c.name?.endsWith(ctxSuffix));
-    let history = (found?.parameters?.history || []);
+    const found = ctxs.find((c) => c.name?.endsWith(ctxSuffix));
+    let history = found?.parameters?.history || [];
     if (!Array.isArray(history)) history = [];
 
-    // Mensaje de sistema (controla el tono)
     const systemPrompt =
       "Eres un asistente útil, claro y conciso. Responde en español neutro.";
 
     const messages = [
       { role: "system", content: systemPrompt },
-      ...history, // [{role:'user'|'assistant', content:string}, ...]
+      ...history, // [{role, content}, ...]
       { role: "user", content: userText },
     ];
 
@@ -62,14 +58,12 @@ app.post("/webhook", requireAuth, async (req, res) => {
     const completion = await deepseek.chat.completions.create({
       model,
       messages,
-      // temperature: 0.7, // si quieres ajustar creatividad
     });
 
     const answer =
       completion?.choices?.[0]?.message?.content ||
       "Lo siento, no pude generar respuesta.";
 
-    // Actualiza historial y devuelve contexto para mantener conversación
     const newHistory = [
       ...history,
       { role: "user", content: userText },
@@ -98,6 +92,6 @@ app.post("/webhook", requireAuth, async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () =>
-  console.log(`Webhook listening on http://0.0.0.0:${port}`)
-);
+app.listen(port, () => {
+  console.log(`Webhook listening on http://0.0.0.0:${port}`);
+});
